@@ -38,15 +38,20 @@ TEST_PATH = 'D:/Machine Learning/Computer Vision/U_NET/validation/'
 
 def load_images(folder, mode='test'):
 
-    X, y = [], []
+    num_items = len(os.listdir(folder))
 
-    for i in tqdm(os.listdir(folder)):
+    X = np.zeros((num_items, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.int8)
+    y = np.zeros((num_items, IMG_HEIGHT, IMG_WIDTH, 1), dtype=bool)
+    print(X.shape)
+
+    for idx, i in tqdm(enumerate(os.listdir(folder)), total=num_items):
         # Read in the image file
         path, _, file = next(os.walk(folder + i + '/images'))
         image_file = path + '/' + file[0]
         img = cv2.imread(image_file)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-        X.append(img)
+        X[idx] = img
 
         if mode == 'train':
             # Read in and concatenate the masks
@@ -58,21 +63,16 @@ def load_images(folder, mode='test'):
                 mask_img = cv2.imread(mask)
                 mask_img = cv2.resize(mask_img, (IMG_WIDTH, IMG_HEIGHT))
                 mask_img = np.expand_dims(cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY), axis=-1)
-                final_mask += mask_img
-            y.append(final_mask)
+                final_mask = np.maximum(mask_img, final_mask)
+            y[idx] = final_mask
 
-    return np.asarray(X), np.asarray(y)
+    return X, y
 
-X_train, y_train = load_images(TRAIN_PATH, mode='train')
-X_test, _ = load_images(TEST_PATH, mode='test')
+My_X_train, My_y_train = load_images(TRAIN_PATH, mode='train')
+My_X_test, _ = load_images(TEST_PATH, mode='test')
 
 
-# Check if the images are loading properly
-idx = 4
-cv2.imshow('image', X_train[idx])
-cv2.imshow('mask', y_train[idx])
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+X_train, y_train = My_X_train, My_y_train
 
 #================================================================#
 # DEFINE THE CUSTOM IOU LOSS METRIC
@@ -223,9 +223,37 @@ model.summary()
 
 earlystop = EarlyStopping(monitor='val_loss', patience=5, verbose=1, restore_best_weights=True)
 
+checkpoint = ModelCheckpoint("nuclei_semantic_segmentation_model.h5",
+                             monitor="val_loss",
+                             mode="min",
+                             save_best_only = True,
+                             verbose=1)
+
 results = model.fit(X_train, y_train,
                     validation_split=0.1,
                     batch_size=16,
                     epochs=10,
                     callbacks=[earlystop])
 
+
+#================================================================#
+# PREDICT THE MASKS FOR THE TRAINING SET
+#================================================================#
+
+y_train_pred = model.predict(X_train, verbose=1)
+y_train_pred = (y_train_pred > 0.5).astype(np.uint8)
+
+
+from skimage.io import imshow as sk_imshow
+
+
+
+idx = 15
+sk_imshow(X_train[idx])
+sk_imshow(y_train[idx])
+sk_imshow(y_train_pred[idx] > 0.5)
+
+cv2.imshow('image',X_train[idx])
+cv2.imshow('mask',y_train_pred[idx] > 0.5)
+cv2.waitKeys(0)
+cv2.DestroyAllWindows()

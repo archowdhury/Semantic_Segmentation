@@ -4,15 +4,16 @@
 import os
 import random
 import warnings
-import cv2
+# import cv2
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from skimage.io import imread, imshow, imread_collection, concatenate_images
+from skimage.io import imread, imshow
 from skimage.transform import resize
-from skimage.morphology import label
+# from skimage.morphology import label
 from tqdm import tqdm
+from PIL import Image
 
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import Model, load_model
@@ -37,6 +38,53 @@ TEST_PATH = 'D:/Machine Learning/Computer Vision/U_NET/validation/'
 #================================================================#
 
 def load_images(folder, mode='test'):
+
+    num_items = len(os.listdir(folder))
+
+    X = []
+    y = np.zeros((num_items, IMG_HEIGHT, IMG_WIDTH, 1), dtype=bool)
+
+    for idx, i in tqdm(enumerate(os.listdir(folder)), total=num_items):
+        # Read in the image file
+        path, _, file = next(os.walk(folder + i + '/images'))
+        image_file = path + '/' + file[0]
+        img = Image.open(image_file)
+        img = img.resize((IMG_HEIGHT, IMG_WIDTH), Image.NEAREST)
+        numpydata = np.asarray(img)[:, :, :IMG_CHANNELS]
+        X.append(numpydata)
+
+    X = np.asarray(X)
+        #
+        # if mode == 'train':
+        #     # Read in and concatenate the masks
+        #     path, _, files = next(os.walk(folder + i + '/masks'))
+        #     masks = [path + '/' + f for f in files]
+        #
+        #     final_mask = np.zeros((IMG_WIDTH, IMG_HEIGHT, 1))
+        #     for mask in masks:
+        #         mask_img = cv2.imread(mask)
+        #         mask_img = cv2.resize(mask_img, (IMG_WIDTH, IMG_HEIGHT))
+        #         mask_img = np.expand_dims(cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY), axis=-1)
+        #         final_mask = np.maximum(mask_img, final_mask)
+        #     y[idx] = final_mask
+
+    return X, y
+
+X_train, y_train = load_images(TRAIN_PATH, mode='train')
+X_test, _ = load_images(TEST_PATH, mode='test')
+
+
+
+filename = r'D:\Machine Learning\Computer Vision\U_NET\train\00ae65c1c6631ae6f2be1a449902976e6eb8483bf6b0740d00530220832c6d3e\images\00ae65c1c6631ae6f2be1a449902976e6eb8483bf6b0740d00530220832c6d3e.png'
+img = Image.open(filename)
+img = img.resize((IMG_HEIGHT, IMG_WIDTH), Image.NEAREST)
+plt.imshow(img)
+
+
+
+
+
+def load_images_mycode(folder, mode='test'):
 
     num_items = len(os.listdir(folder))
 
@@ -68,8 +116,8 @@ def load_images(folder, mode='test'):
 
     return X, y
 
-My_X_train, My_y_train = load_images(TRAIN_PATH, mode='train')
-My_X_test, _ = load_images(TEST_PATH, mode='test')
+
+
 
 
 X_train, y_train = My_X_train, My_y_train

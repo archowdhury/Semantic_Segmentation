@@ -243,7 +243,7 @@ results = model.fit(X_train, y_train,
 y_train_pred = model.predict(X_train, verbose=1)
 y_train_pred = (y_train_pred > 0.5).astype(np.uint8)
 
-idx = 12
+idx = 13
 plt.imshow(X_train[idx])
 plt.imshow(y_train[idx])
 plt.imshow(y_train_pred[idx])

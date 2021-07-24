@@ -1,17 +1,13 @@
-#================================================================#
+# ================================================================#
 # IMPORT THE PACKAGES
-#================================================================#
+# ================================================================#
 import os
-import random
 import warnings
-# import cv2
-import pandas as pd
 import numpy as np
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 from skimage.io import imread, imshow
 from skimage.transform import resize
-# from skimage.morphology import label
+from skimage.morphology import label
 from tqdm import tqdm
 from PIL import Image
 
@@ -23,9 +19,9 @@ import tensorflow as tf
 
 warnings.filterwarnings('ignore')
 
-#================================================================#
+# ================================================================#
 # DEFINE THE CONSTANTS
-#================================================================#
+# ================================================================#
 
 IMG_WIDTH = 128
 IMG_HEIGHT = 128
@@ -33,18 +29,19 @@ IMG_CHANNELS = 3
 TRAIN_PATH = 'D:/Machine Learning/Computer Vision/U_NET/train/'
 TEST_PATH = 'D:/Machine Learning/Computer Vision/U_NET/validation/'
 
-#================================================================#
+
+# ================================================================#
 # READ IN THE IMAGES AND MASKS
-#================================================================#
+# ================================================================#
 
 def load_images(folder, mode='test'):
-
     num_items = len(os.listdir(folder))
 
     X = []
-    y = np.zeros((num_items, IMG_HEIGHT, IMG_WIDTH, 1), dtype=bool)
+    y = []
 
     for idx, i in tqdm(enumerate(os.listdir(folder)), total=num_items):
+
         # Read in the image file
         path, _, file = next(os.walk(folder + i + '/images'))
         image_file = path + '/' + file[0]
@@ -53,78 +50,34 @@ def load_images(folder, mode='test'):
         numpydata = np.asarray(img)[:, :, :IMG_CHANNELS]
         X.append(numpydata)
 
+        if mode == 'train':
+            path, _, files = next(os.walk(folder + i + '/masks'))
+            mask_files = [path + '/' + f for f in files]
+
+            mask = np.zeros((IMG_HEIGHT, IMG_WIDTH))
+            for f in mask_files:
+                submask = Image.open(f)
+                submask = submask.resize((IMG_HEIGHT, IMG_WIDTH))
+                mask = np.maximum(mask, np.array(submask))
+            y.append(mask)
+
+    # Convert X to array
     X = np.asarray(X)
-        #
-        # if mode == 'train':
-        #     # Read in and concatenate the masks
-        #     path, _, files = next(os.walk(folder + i + '/masks'))
-        #     masks = [path + '/' + f for f in files]
-        #
-        #     final_mask = np.zeros((IMG_WIDTH, IMG_HEIGHT, 1))
-        #     for mask in masks:
-        #         mask_img = cv2.imread(mask)
-        #         mask_img = cv2.resize(mask_img, (IMG_WIDTH, IMG_HEIGHT))
-        #         mask_img = np.expand_dims(cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY), axis=-1)
-        #         final_mask = np.maximum(mask_img, final_mask)
-        #     y[idx] = final_mask
+
+    # Convert y to a boolean array
+    y = np.asarray(y)
+    y = y > 0
 
     return X, y
 
+# Load the train and test images
 X_train, y_train = load_images(TRAIN_PATH, mode='train')
 X_test, _ = load_images(TEST_PATH, mode='test')
 
 
-
-filename = r'D:\Machine Learning\Computer Vision\U_NET\train\00ae65c1c6631ae6f2be1a449902976e6eb8483bf6b0740d00530220832c6d3e\images\00ae65c1c6631ae6f2be1a449902976e6eb8483bf6b0740d00530220832c6d3e.png'
-img = Image.open(filename)
-img = img.resize((IMG_HEIGHT, IMG_WIDTH), Image.NEAREST)
-plt.imshow(img)
-
-
-
-
-
-def load_images_mycode(folder, mode='test'):
-
-    num_items = len(os.listdir(folder))
-
-    X = np.zeros((num_items, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS), dtype=np.int8)
-    y = np.zeros((num_items, IMG_HEIGHT, IMG_WIDTH, 1), dtype=bool)
-    print(X.shape)
-
-    for idx, i in tqdm(enumerate(os.listdir(folder)), total=num_items):
-        # Read in the image file
-        path, _, file = next(os.walk(folder + i + '/images'))
-        image_file = path + '/' + file[0]
-        img = cv2.imread(image_file)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-        X[idx] = img
-
-        if mode == 'train':
-            # Read in and concatenate the masks
-            path, _, files = next(os.walk(folder + i + '/masks'))
-            masks = [path + '/' + f for f in files]
-
-            final_mask = np.zeros((IMG_WIDTH, IMG_HEIGHT, 1))
-            for mask in masks:
-                mask_img = cv2.imread(mask)
-                mask_img = cv2.resize(mask_img, (IMG_WIDTH, IMG_HEIGHT))
-                mask_img = np.expand_dims(cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY), axis=-1)
-                final_mask = np.maximum(mask_img, final_mask)
-            y[idx] = final_mask
-
-    return X, y
-
-
-
-
-
-X_train, y_train = My_X_train, My_y_train
-
-#================================================================#
+# ================================================================#
 # DEFINE THE CUSTOM IOU LOSS METRIC
-#================================================================#
+# ================================================================#
 
 def iou_metric(y_true_in, y_pred_in, print_table=False):
     labels = label(y_true_in > 0.5)
@@ -188,18 +141,19 @@ def iou_metric_batch(y_true_in, y_pred_in):
         metric.append(value)
     return np.array(np.mean(metric), dtype=np.float32)
 
+
 def my_iou_metric(label, pred):
     metric_value = tf.py_function(iou_metric_batch, [label, pred], tf.float32)
     return metric_value
 
 
-#================================================================#
+# ================================================================#
 # DEFINE THE U-NET MODEL
-#================================================================#
+# ================================================================#
 
-filter_size = (3,3)
-pooling_size = (2,2)
-strides = (2,2)
+filter_size = (3, 3)
+pooling_size = (2, 2)
+strides = (2, 2)
 
 # input
 inputs = Input((IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
@@ -231,32 +185,32 @@ c5 = Dropout(0.3)(c5)
 c5 = Conv2D(256, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(c5)
 
 # expansion path layers
-u6 = Conv2DTranspose(128, (2,2), strides=strides, padding='same')(c5)
+u6 = Conv2DTranspose(128, (2, 2), strides=strides, padding='same')(c5)
 u6 = concatenate([u6, c4])
 c6 = Conv2D(128, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(u6)
 c6 = Dropout(0.2)(c6)
 c6 = Conv2D(128, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(c6)
 
-u7 = Conv2DTranspose(64, (2,2), strides=strides, padding='same')(c6)
+u7 = Conv2DTranspose(64, (2, 2), strides=strides, padding='same')(c6)
 u7 = concatenate([u7, c3])
 c7 = Conv2D(64, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(u7)
 c7 = Dropout(0.2)(c7)
 c7 = Conv2D(64, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(c7)
 
-u8 = Conv2DTranspose(32, (2,2), strides=strides, padding='same')(c7)
+u8 = Conv2DTranspose(32, (2, 2), strides=strides, padding='same')(c7)
 u8 = concatenate([u8, c2])
 c8 = Conv2D(32, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(u8)
 c8 = Dropout(0.1)(c8)
 c8 = Conv2D(32, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(c8)
 
-u9 = Conv2DTranspose(16, (2,2), strides=strides, padding='same')(c8)
+u9 = Conv2DTranspose(16, (2, 2), strides=strides, padding='same')(c8)
 u9 = concatenate([u9, c1], axis=3)
 c9 = Conv2D(16, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(u9)
 c9 = Dropout(0.1)(c9)
 c9 = Conv2D(16, filter_size, activation='elu', kernel_initializer='he_normal', padding='same')(c9)
 
 # output
-outputs = Conv2D(1, (1,1), activation='sigmoid')(c9)
+outputs = Conv2D(1, (1, 1), activation='sigmoid')(c9)
 
 # create the final model
 model = Model(inputs=[inputs], outputs=[outputs])
@@ -264,44 +218,33 @@ model.compile(optimizer='adam', loss='binary_crossentropy', metrics=[my_iou_metr
 
 model.summary()
 
-
-#================================================================#
+# ================================================================#
 # TRAIN THE MODEL
-#================================================================#
+# ================================================================#
 
 earlystop = EarlyStopping(monitor='val_loss', patience=5, verbose=1, restore_best_weights=True)
 
 checkpoint = ModelCheckpoint("nuclei_semantic_segmentation_model.h5",
                              monitor="val_loss",
                              mode="min",
-                             save_best_only = True,
+                             save_best_only=True,
                              verbose=1)
 
 results = model.fit(X_train, y_train,
                     validation_split=0.1,
                     batch_size=16,
                     epochs=10,
-                    callbacks=[earlystop])
+                    callbacks=[earlystop, checkpoint])
 
-
-#================================================================#
+# ================================================================#
 # PREDICT THE MASKS FOR THE TRAINING SET
-#================================================================#
+# ================================================================#
 
 y_train_pred = model.predict(X_train, verbose=1)
 y_train_pred = (y_train_pred > 0.5).astype(np.uint8)
 
+idx = 12
+plt.imshow(X_train[idx])
+plt.imshow(y_train[idx])
+plt.imshow(y_train_pred[idx])
 
-from skimage.io import imshow as sk_imshow
-
-
-
-idx = 15
-sk_imshow(X_train[idx])
-sk_imshow(y_train[idx])
-sk_imshow(y_train_pred[idx] > 0.5)
-
-cv2.imshow('image',X_train[idx])
-cv2.imshow('mask',y_train_pred[idx] > 0.5)
-cv2.waitKeys(0)
-cv2.DestroyAllWindows()
